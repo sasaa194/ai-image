@@ -413,12 +413,16 @@
 
   <!-- API Key Panel -->
   <div class="key-panel" id="keyPanel">
-    <label>OpenAI API Key</label>
+    <label>API Key</label>
     <div class="key-row">
       <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off">
       <button class="key-save" id="keySave">保存</button>
     </div>
-    <div class="key-hint">Key 仅存储在你的浏览器本地，不会发送到任何第三方服务器。</div>
+    <label style="margin-top:12px;display:block;">Base URL（中转站填这里，官方可不填）</label>
+    <div class="key-row">
+      <input type="text" id="baseUrlInput" placeholder="https://api.ofox.ai/v1" autocomplete="off" style="font-family:inherit;">
+    </div>
+    <div class="key-hint">Key 和 Base URL 仅存储在你的浏览器本地。</div>
     <div class="key-status" id="keyStatus">✓ 已保存</div>
   </div>
 
@@ -516,6 +520,7 @@
   const historyGrid = document.getElementById('historyGrid');
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightboxImg');
+  const baseUrlInput = document.getElementById('baseUrlInput');
 
   let refImageBase64 = null;
   let currentPromptText = '';
@@ -523,11 +528,13 @@
 
   // Init
   const savedKey = localStorage.getItem('openai_key') || '';
+  const savedBaseUrl = localStorage.getItem('api_base_url') || '';
   if (savedKey) {
     keyInput.value = savedKey;
   } else {
     keyPanel.classList.add('show');
   }
+  if (savedBaseUrl) baseUrlInput.value = savedBaseUrl;
   loadHistory();
 
   // API Key
@@ -539,6 +546,9 @@
     const key = keyInput.value.trim();
     if (!key) return;
     localStorage.setItem('openai_key', key);
+    const baseUrl = baseUrlInput.value.trim();
+    if (baseUrl) localStorage.setItem('api_base_url', baseUrl);
+    else localStorage.removeItem('api_base_url');
     keyStatus.style.display = 'block';
     setTimeout(() => { keyStatus.style.display = 'none'; }, 2000);
   });
@@ -618,7 +628,8 @@
         const blob = dataURItoBlob(refImageBase64);
         formData.append('image[]', blob, 'reference.png');
 
-        const resp = await fetch('https://api.openai.com/v1/images/edits', {
+        const baseUrl = (localStorage.getItem('api_base_url') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+        const resp = await fetch(baseUrl + '/images/edits', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + apiKey },
           body: formData
@@ -635,7 +646,8 @@
         if (size !== 'auto') body.size = size;
         else body.size = 'auto';
 
-        const resp = await fetch('https://api.openai.com/v1/images/generations', {
+        const baseUrl2 = (localStorage.getItem('api_base_url') || 'https://api.openai.com/v1').replace(/\/+$/, '');
+        const resp = await fetch(baseUrl2 + '/images/generations', {
           method: 'POST',
           headers: {
             'Authorization': 'Bearer ' + apiKey,
