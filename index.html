@@ -735,7 +735,12 @@
   }
 
   function shouldUseLocalProxy(baseUrl) {
-    return !baseUrl || /api\.ofox\.ai\/v1\/?$/i.test(baseUrl);
+    return !baseUrl
+      || /api\.ofox\.ai\/v1\/?$/i.test(baseUrl)
+      || /^https?:\/\/(127\.0\.0\.1|localhost):8787\/v1$/i.test(baseUrl)
+      || /^https:\/\/[a-z0-9-]+\.lhr\.life\/v1$/i.test(baseUrl)
+      || /^https:\/\/[a-z0-9-]+\.loca\.lt\/v1$/i.test(baseUrl)
+      || /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/v1$/i.test(baseUrl);
   }
 
   function isLocalProxy(baseUrl) {
