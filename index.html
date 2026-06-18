@@ -521,7 +521,7 @@
   const baseUrlInput = document.getElementById('baseUrlInput');
 
   const DEFAULT_API_KEY = 'local-proxy';
-  const DEFAULT_BASE_URL = 'https://7bf8ed4db29035.lhr.life/v1';
+  const DEFAULT_BASE_URL = 'https://3af68babfba6f2.lhr.life/v1';
   const IMAGE_MODEL = 'openai/gpt-image-2';
   const FALLBACK_GENERATION = {
     size: '1024x1024',
@@ -739,7 +739,7 @@
   }
 
   function isLocalProxy(baseUrl) {
-    return /^https?:\/\/(127\.0\.0\.1|localhost):8787\/v1$/i.test(baseUrl) || /^https:\/\/7bf8ed4db29035\.lhr\.life\/v1$/i.test(baseUrl);
+    return /^https?:\/\/(127\.0\.0\.1|localhost):8787\/v1$/i.test(baseUrl) || /^https:\/\/3af68babfba6f2\.lhr\.life\/v1$/i.test(baseUrl);
   }
 
   function getApiHeaders(baseUrl, apiKey, extraHeaders) {
