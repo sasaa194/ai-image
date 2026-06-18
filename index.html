@@ -448,20 +448,18 @@
       <div class="opt-group">
         <label>尺寸</label>
         <select id="sizeSelect">
-          <option value="1080x1920">1080 × 1920（手机竖屏）</option>
-          <option value="1024x1024">1024 × 1024（方形）</option>
+          <option value="1024x1024" selected>1024 × 1024（方形）</option>
           <option value="1536x1024">1536 × 1024（横版）</option>
           <option value="1024x1536">1024 × 1536（竖版）</option>
-          <option value="1920x1080">1920 × 1080（横屏16:9）</option>
           <option value="auto">自动</option>
         </select>
       </div>
       <div class="opt-group">
         <label>质量</label>
         <select id="qualitySelect">
-          <option value="high">高</option>
+          <option value="low" selected>低（稳定）</option>
           <option value="medium">中</option>
-          <option value="low">低（快速）</option>
+          <option value="high">高</option>
           <option value="auto">自动</option>
         </select>
       </div>
@@ -522,19 +520,26 @@
   const lightboxImg = document.getElementById('lightboxImg');
   const baseUrlInput = document.getElementById('baseUrlInput');
 
+  const DEFAULT_API_KEY = 'local-proxy';
+  const DEFAULT_BASE_URL = 'http://127.0.0.1:8787/v1';
+  const IMAGE_MODEL = 'openai/gpt-image-2';
+  const FALLBACK_GENERATION = {
+    size: '1024x1024',
+    quality: 'low'
+  };
+
   let refImageBase64 = null;
   let currentPromptText = '';
   let history = [];
 
   // Init
-  const savedKey = localStorage.getItem('openai_key') || '';
-  const savedBaseUrl = localStorage.getItem('api_base_url') || '';
-  if (savedKey) {
-    keyInput.value = savedKey;
-  } else {
-    keyPanel.classList.add('show');
-  }
-  if (savedBaseUrl) baseUrlInput.value = savedBaseUrl;
+  const savedKey = localStorage.getItem('openai_key') || DEFAULT_API_KEY;
+  const rawSavedBaseUrl = localStorage.getItem('api_base_url') || '';
+  const savedBaseUrl = shouldUseLocalProxy(rawSavedBaseUrl) ? DEFAULT_BASE_URL : rawSavedBaseUrl;
+  localStorage.setItem('openai_key', savedKey);
+  localStorage.setItem('api_base_url', savedBaseUrl);
+  keyInput.value = savedKey;
+  baseUrlInput.value = savedBaseUrl;
   loadHistory();
 
   // API Key
@@ -590,8 +595,9 @@
   });
 
   async function generate() {
+    const baseUrl = getBaseUrl();
     const apiKey = localStorage.getItem('openai_key');
-    if (!apiKey) {
+    if (!apiKey && !isLocalProxy(baseUrl)) {
       keyPanel.classList.add('show');
       keyInput.focus();
       showStatus('请先设置 API Key', true);
@@ -619,7 +625,7 @@
       if (refImageBase64) {
         // Use /v1/images/edits for reference image
         const formData = new FormData();
-        formData.append('model', 'gpt-image-2');
+        formData.append('model', IMAGE_MODEL);
         formData.append('prompt', promptText);
         if (size !== 'auto') formData.append('size', size);
         formData.append('quality', quality);
@@ -628,34 +634,27 @@
         const blob = dataURItoBlob(refImageBase64);
         formData.append('image[]', blob, 'reference.png');
 
-        const baseUrl = (localStorage.getItem('api_base_url') || 'https://api.openai.com/v1').replace(/\/+$/, '');
         const resp = await fetch(baseUrl + '/images/edits', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + apiKey },
+          headers: getApiHeaders(baseUrl, apiKey),
           body: formData
         });
-        data = await resp.json();
+        data = await readApiResponse(resp);
       } else {
-        // Use /v1/images/generations for text-to-image
-        const body = {
-          model: 'gpt-image-2',
-          prompt: promptText,
-          n: 1,
-          quality: quality
-        };
-        if (size !== 'auto') body.size = size;
-        else body.size = 'auto';
-
-        const baseUrl2 = (localStorage.getItem('api_base_url') || 'https://api.openai.com/v1').replace(/\/+$/, '');
-        const resp = await fetch(baseUrl2 + '/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + apiKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(body)
-        });
-        data = await resp.json();
+        try {
+          data = await requestGeneration(baseUrl, apiKey, promptText, size, quality);
+        } catch (firstErr) {
+          const canFallback = size !== FALLBACK_GENERATION.size || quality !== FALLBACK_GENERATION.quality;
+          if (!canFallback) throw firstErr;
+          showStatus('<span class="spinner"></span>首次请求失败，正在用稳定参数重试…', false);
+          data = await requestGeneration(
+            baseUrl,
+            apiKey,
+            promptText,
+            FALLBACK_GENERATION.size,
+            FALLBACK_GENERATION.quality
+          );
+        }
       }
 
       if (data.error) {
@@ -709,6 +708,61 @@
   }
   function hideStatus() {
     status.className = 'status';
+  }
+
+  async function requestGeneration(baseUrl, apiKey, promptText, size, quality) {
+    const body = {
+      model: IMAGE_MODEL,
+      prompt: promptText,
+      n: 1,
+      quality,
+      output_format: 'png'
+    };
+    body.size = size || FALLBACK_GENERATION.size;
+
+    const resp = await fetch(baseUrl + '/images/generations', {
+      method: 'POST',
+      headers: getApiHeaders(baseUrl, apiKey, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body)
+    });
+    return readApiResponse(resp);
+  }
+
+  function getBaseUrl() {
+    const storedBaseUrl = localStorage.getItem('api_base_url') || '';
+    if (shouldUseLocalProxy(storedBaseUrl)) return DEFAULT_BASE_URL;
+    return storedBaseUrl.replace(/\/+$/, '');
+  }
+
+  function shouldUseLocalProxy(baseUrl) {
+    return !baseUrl || /api\.ofox\.ai\/v1\/?$/i.test(baseUrl);
+  }
+
+  function isLocalProxy(baseUrl) {
+    return /^https?:\/\/(127\.0\.0\.1|localhost):8787\/v1$/i.test(baseUrl);
+  }
+
+  function getApiHeaders(baseUrl, apiKey, extraHeaders) {
+    const headers = { ...(extraHeaders || {}) };
+    if (!isLocalProxy(baseUrl) && apiKey) {
+      headers.Authorization = 'Bearer ' + apiKey;
+    }
+    return headers;
+  }
+
+  async function readApiResponse(resp) {
+    const text = await resp.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error('接口返回的不是 JSON：' + text.slice(0, 180));
+    }
+    if (!resp.ok) {
+      const message = data.error?.message || data.message || resp.statusText || '请求失败';
+      throw new Error('HTTP ' + resp.status + '：' + message);
+    }
+    return data;
   }
 
   // History (store only last 20 thumbnails to manage localStorage size)
