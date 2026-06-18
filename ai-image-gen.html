@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 作图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0c;
+    --surface: #141418;
+    --surface-2: #1c1c22;
+    --border: #2a2a32;
+    --text: #e8e6e3;
+    --text-dim: #8a8890;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --danger: #ef4444;
+    --radius: 10px;
+  }
+
+  body {
+    font-family: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .app {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 36px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .header h1 span { color: var(--accent); }
+  .key-toggle {
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    transition: all .15s;
+  }
+  .key-toggle:hover { border-color: var(--accent); color: var(--text); }
+
+  /* API Key Panel */
+  .key-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .key-panel.show { display: block; }
+  .key-panel label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .key-row {
+    display: flex;
+    gap: 8px;
+  }
+  .key-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .key-row input:focus { outline: none; border-color: var(--accent); }
+  .key-save {
+    padding: 10px 18px;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .key-save:hover { background: var(--accent-hover); }
+  .key-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+  .key-status {
+    font-size: 12px;
+    margin-top: 8px;
+    color: #22c55e;
+    display: none;
+  }
+
+  /* Main Form */
+  .form-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .prompt-area {
+    width: 100%;
+    min-height: 100px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.6;
+  }
+  .prompt-area:focus { outline: none; border-color: var(--accent); }
+  .prompt-area::placeholder { color: var(--text-dim); }
+
+  /* Reference Image Upload */
+  .ref-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .ref-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .ref-drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+  }
+  .ref-drop:hover, .ref-drop.dragover {
+    border-color: var(--accent);
+    background: rgba(99,102,241,.04);
+  }
+  .ref-drop input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .ref-drop-text {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .ref-drop-text strong { color: var(--accent); }
+  .ref-preview {
+    display: none;
+    margin-top: 10px;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: 200px;
+  }
+  .ref-preview img {
+    width: 100%;
+    display: block;
+    border-radius: 8px;
+  }
+  .ref-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0,0,0,.7);
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Options Row */
+  .options {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .opt-group {
+    flex: 1;
+    min-width: 140px;
+  }
+  .opt-group label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .opt-group select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 10px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238a8890' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+  .opt-group select:focus { outline: none; border-color: var(--accent); }
+
+  /* Generate Button */
+  .gen-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: 0.2px;
+  }
+  .gen-btn:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
+  .gen-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* Status */
+  .status {
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+    color: var(--text-dim);
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.error { color: var(--danger); }
+  .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .result.show { display: block; }
+  .result img {
+    width: 100%;
+    display: block;
+  }
+  .result-actions {
+    padding: 14px 16px;
+    display: flex;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .result-actions button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    font-family: inherit;
+  }
+  .dl-btn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+  }
+  .dl-btn:hover { background: var(--accent-hover); }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .copy-btn:hover { border-color: var(--accent); }
+
+  /* History */
+  .history-title {
+    font-size: 13px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 32px;
+    margin-bottom: 12px;
+  }
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .history-item {
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: border-color .15s;
+    position: relative;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-item img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+  }
+  .history-item .hi-delete {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    background: rgba(0,0,0,.65);
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .history-item:hover .hi-delete { display: flex; }
+
+  /* Lightbox */
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    cursor: zoom-out;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img {
+    max-width: 95%;
+    max-height: 95vh;
+    border-radius: 8px;
+    cursor: default;
+  }
+
+  @media (max-width: 480px) {
+    .app { padding: 20px 14px 60px; }
+    .header h1 { font-size: 18px; }
+    .options { flex-direction: column; gap: 10px; }
+    .opt-group { min-width: 100%; }
+    .history-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <h1>AI <span>作图</span></h1>
+    <button class="key-toggle" id="keyToggle">⚙ API Key</button>
+  </div>
+
+  <!-- API Key Panel -->
+  <div class="key-panel" id="keyPanel">
+    <label>OpenAI API Key</label>
+    <div class="key-row">
+      <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off">
+      <button class="key-save" id="keySave">保存</button>
+    </div>
+    <div class="key-hint">Key 仅存储在你的浏览器本地，不会发送到任何第三方服务器。</div>
+    <div class="key-status" id="keyStatus">✓ 已保存</div>
+  </div>
+
+  <!-- Main Form -->
+  <div class="form-card">
+    <textarea class="prompt-area" id="prompt" placeholder="描述你想要生成的图片…&#10;&#10;例：一个简约风格的直播间，深蓝色背景，中间放置一张木质桌子，桌上有一台笔记本电脑和一个麦克风，柔和的暖光照明"></textarea>
+
+    <!-- Reference Image -->
+    <div class="ref-section">
+      <div class="ref-label">参考图（可选，可拖拽上传）</div>
+      <div class="ref-drop" id="refDrop">
+        <input type="file" id="refFile" accept="image/*">
+        <div class="ref-drop-text">点击或拖拽上传 <strong>参考图片</strong></div>
+      </div>
+      <div class="ref-preview" id="refPreview">
+        <img id="refImg" src="" alt="参考图">
+        <button class="ref-remove" id="refRemove">✕</button>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="options">
+      <div class="opt-group">
+        <label>尺寸</label>
+        <select id="sizeSelect">
+          <option value="1080x1920">1080 × 1920（手机竖屏）</option>
+          <option value="1024x1024">1024 × 1024（方形）</option>
+          <option value="1536x1024">1536 × 1024（横版）</option>
+          <option value="1024x1536">1024 × 1536（竖版）</option>
+          <option value="1920x1080">1920 × 1080（横屏16:9）</option>
+          <option value="auto">自动</option>
+        </select>
+      </div>
+      <div class="opt-group">
+        <label>质量</label>
+        <select id="qualitySelect">
+          <option value="high">高</option>
+          <option value="medium">中</option>
+          <option value="low">低（快速）</option>
+          <option value="auto">自动</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="gen-btn" id="genBtn">生成图片</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="status"></div>
+
+  <!-- Result -->
+  <div class="result" id="result">
+    <img id="resultImg" src="" alt="生成结果">
+    <div class="result-actions">
+      <button class="dl-btn" id="dlBtn">下载图片</button>
+      <button class="copy-btn" id="copyPrompt">复制提示词</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div id="historySection" style="display:none">
+    <div class="history-title">历史记录</div>
+    <div class="history-grid" id="historyGrid"></div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Elements
+  const keyToggle = document.getElementById('keyToggle');
+  const keyPanel = document.getElementById('keyPanel');
+  const keyInput = document.getElementById('keyInput');
+  const keySave = document.getElementById('keySave');
+  const keyStatus = document.getElementById('keyStatus');
+  const prompt = document.getElementById('prompt');
+  const refDrop = document.getElementById('refDrop');
+  const refFile = document.getElementById('refFile');
+  const refPreview = document.getElementById('refPreview');
+  const refImg = document.getElementById('refImg');
+  const refRemove = document.getElementById('refRemove');
+  const sizeSelect = document.getElementById('sizeSelect');
+  const qualitySelect = document.getElementById('qualitySelect');
+  const genBtn = document.getElementById('genBtn');
+  const status = document.getElementById('status');
+  const result = document.getElementById('result');
+  const resultImg = document.getElementById('resultImg');
+  const dlBtn = document.getElementById('dlBtn');
+  const copyPrompt = document.getElementById('copyPrompt');
+  const historySection = document.getElementById('historySection');
+  const historyGrid = document.getElementById('historyGrid');
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightboxImg');
+
+  let refImageBase64 = null;
+  let currentPromptText = '';
+  let history = [];
+
+  // Init
+  const savedKey = localStorage.getItem('openai_key') || '';
+  if (savedKey) {
+    keyInput.value = savedKey;
+  } else {
+    keyPanel.classList.add('show');
+  }
+  loadHistory();
+
+  // API Key
+  keyToggle.addEventListener('click', () => {
+    keyPanel.classList.toggle('show');
+  });
+
+  keySave.addEventListener('click', () => {
+    const key = keyInput.value.trim();
+    if (!key) return;
+    localStorage.setItem('openai_key', key);
+    keyStatus.style.display = 'block';
+    setTimeout(() => { keyStatus.style.display = 'none'; }, 2000);
+  });
+
+  // Reference Image
+  refDrop.addEventListener('dragover', e => { e.preventDefault(); refDrop.classList.add('dragover'); });
+  refDrop.addEventListener('dragleave', () => { refDrop.classList.remove('dragover'); });
+  refDrop.addEventListener('drop', e => {
+    e.preventDefault();
+    refDrop.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleRefFile(e.dataTransfer.files[0]);
+  });
+  refFile.addEventListener('change', e => {
+    if (e.target.files.length) handleRefFile(e.target.files[0]);
+  });
+  refRemove.addEventListener('click', () => {
+    refImageBase64 = null;
+    refPreview.style.display = 'none';
+    refDrop.style.display = 'block';
+    refFile.value = '';
+  });
+
+  function handleRefFile(file) {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      refImageBase64 = e.target.result; // full data URI
+      refImg.src = refImageBase64;
+      refPreview.style.display = 'block';
+      refDrop.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Generate
+  genBtn.addEventListener('click', generate);
+  prompt.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') generate();
+  });
+
+  async function generate() {
+    const apiKey = localStorage.getItem('openai_key');
+    if (!apiKey) {
+      keyPanel.classList.add('show');
+      keyInput.focus();
+      showStatus('请先设置 API Key', true);
+      return;
+    }
+    const promptText = prompt.value.trim();
+    if (!promptText) {
+      prompt.focus();
+      showStatus('请输入提示词', true);
+      return;
+    }
+
+    currentPromptText = promptText;
+    genBtn.disabled = true;
+    genBtn.textContent = '生成中…';
+    result.classList.remove('show');
+    showStatus('<span class="spinner"></span>正在生成，请稍候…可能需要 30 秒到 2 分钟', false);
+
+    const size = sizeSelect.value;
+    const quality = qualitySelect.value;
+
+    try {
+      let data;
+
+      if (refImageBase64) {
+        // Use /v1/images/edits for reference image
+        const formData = new FormData();
+        formData.append('model', 'gpt-image-2');
+        formData.append('prompt', promptText);
+        if (size !== 'auto') formData.append('size', size);
+        formData.append('quality', quality);
+
+        // Convert data URI to blob
+        const blob = dataURItoBlob(refImageBase64);
+        formData.append('image[]', blob, 'reference.png');
+
+        const resp = await fetch('https://api.openai.com/v1/images/edits', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + apiKey },
+          body: formData
+        });
+        data = await resp.json();
+      } else {
+        // Use /v1/images/generations for text-to-image
+        const body = {
+          model: 'gpt-image-2',
+          prompt: promptText,
+          n: 1,
+          quality: quality
+        };
+        if (size !== 'auto') body.size = size;
+        else body.size = 'auto';
+
+        const resp = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+        data = await resp.json();
+      }
+
+      if (data.error) {
+        throw new Error(data.error.message || JSON.stringify(data.error));
+      }
+
+      // GPT Image models return b64_json
+      const imgData = data.data[0];
+      let imgSrc;
+      if (imgData.b64_json) {
+        imgSrc = 'data:image/png;base64,' + imgData.b64_json;
+      } else if (imgData.url) {
+        imgSrc = imgData.url;
+      }
+
+      resultImg.src = imgSrc;
+      result.classList.add('show');
+      hideStatus();
+
+      // Save to history
+      addToHistory(imgSrc, promptText);
+
+    } catch (err) {
+      showStatus('生成失败：' + err.message, true);
+    } finally {
+      genBtn.disabled = false;
+      genBtn.textContent = '生成图片';
+    }
+  }
+
+  // Download
+  dlBtn.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = resultImg.src;
+    a.download = 'ai-image-' + Date.now() + '.png';
+    a.click();
+  });
+
+  // Copy prompt
+  copyPrompt.addEventListener('click', () => {
+    navigator.clipboard.writeText(currentPromptText).then(() => {
+      copyPrompt.textContent = '已复制 ✓';
+      setTimeout(() => { copyPrompt.textContent = '复制提示词'; }, 1500);
+    });
+  });
+
+  // Status helpers
+  function showStatus(msg, isError) {
+    status.innerHTML = msg;
+    status.className = 'status show' + (isError ? ' error' : '');
+  }
+  function hideStatus() {
+    status.className = 'status';
+  }
+
+  // History (store only last 20 thumbnails to manage localStorage size)
+  function loadHistory() {
+    try {
+      history = JSON.parse(localStorage.getItem('img_history') || '[]');
+    } catch { history = []; }
+    renderHistory();
+  }
+
+  function addToHistory(src, promptText) {
+    // Create thumbnail (compress to save space)
+    const canvas = document.createElement('canvas');
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 300;
+      let w = img.width, h = img.height;
+      if (w > h) { h = h * maxDim / w; w = maxDim; }
+      else { w = w * maxDim / h; h = maxDim; }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const thumb = canvas.toDataURL('image/jpeg', 0.7);
+
+      history.unshift({ thumb, prompt: promptText, time: Date.now(), full: src });
+      if (history.length > 20) history = history.slice(0, 20);
+
+      // Try to save; if quota exceeded, drop older items
+      try {
+        localStorage.setItem('img_history', JSON.stringify(history));
+      } catch {
+        history = history.slice(0, 10);
+        try { localStorage.setItem('img_history', JSON.stringify(history)); } catch {}
+      }
+      renderHistory();
+    };
+    img.src = src;
+  }
+
+  function renderHistory() {
+    if (history.length === 0) {
+      historySection.style.display = 'none';
+      return;
+    }
+    historySection.style.display = 'block';
+    historyGrid.innerHTML = '';
+    history.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `<img src="${item.thumb}" alt="${item.prompt || ''}" title="${(item.prompt || '').slice(0,80)}"><button class="hi-delete">✕</button>`;
+      div.querySelector('img').addEventListener('click', () => {
+        // Show full image or thumbnail in lightbox
+        lightboxImg.src = item.full || item.thumb;
+        lightbox.classList.add('show');
+      });
+      div.querySelector('.hi-delete').addEventListener('click', e => {
+        e.stopPropagation();
+        history.splice(idx, 1);
+        try { localStorage.setItem('img_history', JSON.stringify(history)); } catch {}
+        renderHistory();
+      });
+      historyGrid.appendChild(div);
+    });
+  }
+
+  // Lightbox
+  lightbox.addEventListener('click', e => {
+    if (e.target === lightbox) lightbox.classList.remove('show');
+  });
+  resultImg.addEventListener('click', () => {
+    lightboxImg.src = resultImg.src;
+    lightbox.classList.add('show');
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') lightbox.classList.remove('show');
+  });
+
+  // Util
+  function dataURItoBlob(dataURI) {
+    const parts = dataURI.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const raw = atob(parts[1]);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+})();
+</script>
+</body>
+</html>
